@@ -120,9 +120,12 @@ def open_csv_with_fallback(file_path: Path):
             # 실제로 일부 내용을 읽어 디코딩 오류가 있는지 먼저 확인합니다.
             file.read(4096)
             file.seek(0)
+
             return file, encoding
+
         except UnicodeDecodeError as error:
             last_error = error
+
             try:
                 file.close()
             except Exception:
@@ -163,6 +166,7 @@ def load_data(file_path: str, modified_time: float) -> Tuple[List[Dict], str]:
 
     with file:
         reader = csv.DictReader(file)
+
         fieldnames = set(reader.fieldnames or [])
         missing_columns = REQUIRED_COLUMNS - fieldnames
 
@@ -222,10 +226,12 @@ st.caption("📊 분기를 선택하면 아래의 핵심 지표가 자동으로 
 
 try:
     data_path = find_data_file()
+
     data, used_encoding = load_data(
         str(data_path),
         data_path.stat().st_mtime,
     )
+
 except (FileNotFoundError, UnicodeError, KeyError, csv.Error) as error:
     st.error(f"🚨 데이터를 불러올 수 없습니다.\n\n{error}")
     st.stop()
@@ -243,40 +249,72 @@ quarter_codes = sorted(
     key=quarter_sort_key,
 )
 
-# 화면에는 한글 분기명을 보여주되, 실제 집계에는 원본 코드를 사용합니다.
+# 화면에는 한글 분기명을 보여주되 실제 집계에는 원본 코드를 사용합니다.
 quarter_options = ["전체"] + quarter_codes
 
 selected_quarter = st.selectbox(
     "🗓️ 분석할 분기를 선택하세요",
     options=quarter_options,
-    index=0,  # 첫 화면의 기본 선택값은 '전체'입니다.
-    format_func=lambda value: "전체 분기" if value == "전체" else quarter_label(value),
+    index=0,
+    format_func=lambda value: (
+        "전체 분기"
+        if value == "전체"
+        else quarter_label(value)
+    ),
 )
 
 if selected_quarter == "전체":
     filtered_data = data
     selected_label = "전체 분기"
+
 else:
     filtered_data = [
-        row for row in data if row["quarter"] == selected_quarter
+        row
+        for row in data
+        if row["quarter"] == selected_quarter
     ]
+
     selected_label = quarter_label(selected_quarter)
 
 
 # -----------------------------------------------------------------------------
 # 6. KPI 계산
 # -----------------------------------------------------------------------------
-total_revenue = sum(row["revenue"] for row in filtered_data)
-total_transactions = sum(row["transactions"] for row in filtered_data)
+total_revenue = sum(
+    row["revenue"]
+    for row in filtered_data
+)
 
-# 빈 문자열은 상권·업종 개수에서 제외합니다.
-market_count = len({row["market"] for row in filtered_data if row["market"]})
-industry_count = len({row["industry"] for row in filtered_data if row["industry"]})
+total_transactions = sum(
+    row["transactions"]
+    for row in filtered_data
+)
+
+# 빈 문자열은 상권 개수에서 제외합니다.
+market_count = len(
+    {
+        row["market"]
+        for row in filtered_data
+        if row["market"]
+    }
+)
+
+# 빈 문자열은 업종 개수에서 제외합니다.
+industry_count = len(
+    {
+        row["industry"]
+        for row in filtered_data
+        if row["industry"]
+    }
+)
 
 st.markdown(f"### 📌 {selected_label} 핵심 지표")
 
 # 화면을 가로 4칸으로 나눕니다.
-col1, col2, col3, col4 = st.columns(4, gap="medium")
+col1, col2, col3, col4 = st.columns(
+    4,
+    gap="medium",
+)
 
 with col1:
     st.metric(
@@ -302,7 +340,13 @@ with col4:
         value=f"{industry_count:,} 개",
     )
 
+
+# -----------------------------------------------------------------------------
+# 7. 하단 안내
+# -----------------------------------------------------------------------------
 st.divider()
+
 st.caption(
-    f"📁 사용 파일: {data_path.name}  |  🔤 읽은 인코딩: {used_encoding.upper()}"
+    f"📁 사용 파일: {data_path.name}  |  "
+    f"🔤 읽은 인코딩: {used_encoding.upper()}"
 )
