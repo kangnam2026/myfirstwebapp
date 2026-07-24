@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 from pathlib import Path
 
 # --------------------------------------------------
@@ -23,7 +24,6 @@ df = pd.read_csv(DATA_FILE, encoding="cp949")
 
 # --------------------------------------------------
 # 분기 컬럼 생성
-# 예) 20241 → 2024년 1분기
 # --------------------------------------------------
 df["분기"] = (
     df["기준_년분기_코드"]
@@ -52,7 +52,7 @@ else:
     data = df[df["분기"] == selected]
 
 # --------------------------------------------------
-# 메트릭 계산
+# KPI 계산
 # --------------------------------------------------
 sales = data["당월_매출_금액"].sum()
 count = data["당월_매출_건수"].sum()
@@ -60,11 +60,11 @@ count = data["당월_매출_건수"].sum()
 market_cnt = data["상권_코드_명"].nunique()
 service_cnt = data["서비스_업종_코드_명"].nunique()
 
-sales_eok = sales / 100000000      # 억원
-count_man = count / 10000          # 만건
+sales_eok = sales / 100000000
+count_man = count / 10000
 
 # --------------------------------------------------
-# 메트릭 표시
+# KPI
 # --------------------------------------------------
 col1, col2, col3, col4 = st.columns(4)
 
@@ -94,6 +94,78 @@ with col4:
 
 st.markdown("---")
 
-st.info(
-    f"📌 현재 분석 대상 : **{selected}**"
+st.info(f"📌 현재 분석 대상 : **{selected}**")
+
+# =====================================================
+# 업종별 분기 매출 TOP10
+# =====================================================
+
+top10 = (
+    data.groupby("서비스_업종_코드_명", as_index=False)["당월_매출_금액"]
+    .sum()
 )
+
+top10.columns = ["업종", "매출액"]
+
+top10["매출(억원)"] = top10["매출액"] / 100000000
+
+top10 = (
+    top10.sort_values("매출액", ascending=False)
+    .head(10)
+)
+
+st.subheader("🏆 분기 매출 TOP10 업종")
+
+bars = (
+    alt.Chart(top10)
+    .mark_bar(
+        cornerRadiusTopRight=6,
+        cornerRadiusBottomRight=6
+    )
+    .encode(
+        y=alt.Y(
+            "업종:N",
+            sort="-x",
+            title=None
+        ),
+        x=alt.X(
+            "매출(억원):Q",
+            title="매출액 (억원)"
+        ),
+        tooltip=[
+            alt.Tooltip("업종:N"),
+            alt.Tooltip(
+                "매출(억원):Q",
+                title="매출액(억원)",
+                format=",.1f"
+            )
+        ]
+    )
+)
+
+text = (
+    alt.Chart(top10)
+    .mark_text(
+        align="left",
+        baseline="middle",
+        dx=5,
+        fontSize=13
+    )
+    .encode(
+        y=alt.Y("업종:N", sort="-x"),
+        x="매출(억원):Q",
+        text=alt.Text(
+            "매출(억원):Q",
+            format=",.1f"
+        )
+    )
+)
+
+chart = (
+    (bars + text)
+    .properties(
+        height=450
+    )
+)
+
+st.altair_chart(chart, use_container_width=True)
